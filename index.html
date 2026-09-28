@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator & Pengagihan Bil Maxis Per Akaun</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS for Excel Reading/Exporting -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        maxis: {
+                            green: '#02a947',
+                            darkgreen: '#00702e',
+                            lightgreen: '#e6f7ec',
+                            accent: '#10b981',
+                            dark: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+        }
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-full {
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <header class="bg-gradient-to-r from-maxis-darkgreen via-maxis-green to-emerald-600 text-white shadow-md no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="p-2.5 bg-white/10 rounded-xl backdrop-blur-md border border-white/20">
+                        <i class="fa-solid fa-calculator text-2xl text-emerald-200"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-bold tracking-tight">Kalkulator Pengagihan Bil Maxis</h1>
+                        <p class="text-xs sm:text-sm text-emerald-100 opacity-90">Kira pecahan bayaran mengikut peranti Zerolution, plan, add-on & SST per akaun</p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <button onclick="openAddAccountModal()" class="bg-white text-maxis-darkgreen hover:bg-emerald-50 px-3.5 py-2 rounded-lg text-sm font-semibold shadow transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-user-plus text-emerald-600"></i>
+                        <span>Tambah Akaun / Talian</span>
+                    </button>
+                    <button onclick="exportToExcel()" class="bg-emerald-800/60 hover:bg-emerald-800/80 border border-white/20 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span class="hidden sm:inline">Eksport Excel</span>
+                    </button>
+                    <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-print"></i>
+                        <span class="hidden sm:inline">Cetak</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Master Account Settings & Global Controls -->
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Nama Tajuk Bil / Pelanggan Utama</label>
+                <input type="text" id="master-bill-title" value="Bil Keluarga Maxis / Akaun Utama" oninput="saveData()" class="w-full text-slate-900 font-bold border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Tetapan Kadar Cukai SST</label>
+                <div class="flex items-center gap-3">
+                    <select id="sst-rate-select" onchange="updateTaxRate()" class="w-full text-slate-900 font-semibold border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white">
+                        <option value="0.08">SST 8% (Kadar Semasa)</option>
+                        <option value="0.06" selected>SST 6% (Kadar Pilihan/Lama)</option>
+                        <option value="0.00">0% (Tanpa Cukai)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="bg-emerald-50 rounded-xl p-3 border border-emerald-100 flex justify-between items-center">
+                <div>
+                    <span class="text-xs font-semibold text-emerald-800 uppercase block">Jumlah Keseluruhan Bil</span>
+                    <span class="text-2xl font-extrabold text-emerald-700" id="grand-total-display">RM 0.00</span>
+                </div>
+                <div class="text-right text-xs text-emerald-800">
+                    <div>Sub-jumlah: <span class="font-bold" id="grand-subtotal-display">RM 0.00</span></div>
+                    <div>Cukai SST: <span class="font-bold" id="grand-tax-display">RM 0.00</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Bilangan Talian/Akaun</p>
+                    <p class="text-xl font-bold text-slate-800" id="total-accounts-count">0 Talian</p>
+                </div>
+                <div class="p-2.5 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-phone text-lg"></i></div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Jumlah Komitmen Pelan</p>
+                    <p class="text-xl font-bold text-slate-800" id="total-plans-amount">RM 0.00</p>
+                </div>
+                <div class="p-2.5 bg-indigo-50 text-indigo-600 rounded-lg"><i class="fa-solid fa-layer-group text-lg"></i></div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Jumlah Ansuran Zerolution</p>
+                    <p class="text-xl font-bold text-slate-800" id="total-zerolution-amount">RM 0.00</p>
+                </div>
+                <div class="p-2.5 bg-purple-50 text-purple-600 rounded-lg"><i class="fa-solid fa-mobile-screen-button text-lg"></i></div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Jumlah Add-on & Rebat</p>
+                    <p class="text-xl font-bold text-slate-800" id="total-addons-rebates-amount">RM 0.00</p>
+                </div>
+                <div class="p-2.5 bg-amber-50 text-amber-600 rounded-lg"><i class="fa-solid fa-tags text-lg"></i></div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-users text-maxis-green"></i>
+                        Senarai Pengiraan Bil Mengikut Talian / Pengguna
+                    </h2>
+                    <p class="text-xs text-slate-500">Masukkan nilai pelan asas, Zerolution, add-on, dan rebat untuk mengira bayaran berserta SST bagi setiap akaun.</p>
+                </div>
+                <button onclick="openAddAccountModal()" class="bg-emerald-50 hover:bg-emerald-100 text-maxis-darkgreen border border-emerald-200 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto">
+                    <i class="fa-solid fa-plus"></i> Tambah Talian Baru
+                </button>
+            </div>
+
+            <div class="p-5 space-y-4" id="accounts-container">
+                <!-- Dynamic Account Cards Injected via JS -->
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+                        <i class="fa-solid fa-table-list text-maxis-green"></i>
+                        Jadual Ringkasan Bayaran Bersih Per Akaun (Payment Breakdown Table)
+                    </h3>
+                    <p class="text-xs text-slate-500">Boleh terus dikongsi kepada setiap pengguna untuk makluman bayaran masing-masing</p>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="summary-table">
+                    <thead>
+                        <tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                            <th class="py-3 px-4 font-semibold">No</th>
+                            <th class="py-3 px-4 font-semibold">Pengguna / Talian</th>
+                            <th class="py-3 px-4 font-semibold text-right">Pelan Asas (RM)</th>
+                            <th class="py-3 px-4 font-semibold text-right">Zerolution (RM)</th>
+                            <th class="py-3 px-4 font-semibold text-right">Add-on (RM)</th>
+                            <th class="py-3 px-4 font-semibold text-right">Rebat (RM)</th>
+                            <th class="py-3 px-4 font-semibold text-right">Sub-Total (RM)</th>
+                            <th class="py-3 px-4 font-semibold text-right">SST (<span class="sst-rate-label">6%</span>) (RM)</th>
+                            <th class="py-3 px-4 font-semibold text-right bg-emerald-50 text-emerald-900">JUMLAH PERLU DIBAYAR (RM)</th>
+                            <th class="py-3 px-4 font-semibold text-center no-print">Tindakan</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-sm" id="summary-table-body">
+                        <!-- Dynamic Summary Rows Injected via JS -->
+                    </tbody>
+                    <tfoot class="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                        <tr>
+                            <td colspan="2" class="py-3 px-4 text-right">JUMLAH KESELURUHAN:</td>
+                            <td class="py-3 px-4 text-right" id="foot-plan">RM 0.00</td>
+                            <td class="py-3 px-4 text-right" id="foot-zero">RM 0.00</td>
+                            <td class="py-3 px-4 text-right" id="foot-addon">RM 0.00</td>
+                            <td class="py-3 px-4 text-right text-emerald-700" id="foot-rebate">-RM 0.00</td>
+                            <td class="py-3 px-4 text-right" id="foot-subtotal">RM 0.00</td>
+                            <td class="py-3 px-4 text-right" id="foot-tax">RM 0.00</td>
+                            <td class="py-3 px-4 text-right text-emerald-700 text-base bg-emerald-100/70" id="foot-total">RM 0.00</td>
+                            <td class="no-print"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="account-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden no-print">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-900" id="modal-title">Tambah Talian / Akaun Baru</h3>
+                <button onclick="closeAddAccountModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <form id="account-form" onsubmit="handleFormSubmit(event)" class="space-y-3">
+                <input type="hidden" id="edit-account-id" value="">
+                
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Pengguna / Pemilik Talian *</label>
+                    <input type="text" id="input-name" placeholder="Contoh: Ahmad (Talian Utama)" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nombor Telefon / Ref Akaun</label>
+                    <input type="text" id="input-phone" placeholder="Contoh: 012-345 6789" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Caj Pelan Asas (RM)</label>
+                        <input type="number" step="0.01" id="input-plan" placeholder="0.00" value="0.00" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Zerolution Peranti (RM)</label>
+                        <input type="number" step="0.01" id="input-zerolution" placeholder="0.00" value="0.00" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Add-on / Pas Lain (RM)</label>
+                        <input type="number" step="0.01" id="input-addon" placeholder="0.00" value="0.00" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Diskaun / Rebat (RM)</label>
+                        <input type="number" step="0.01" id="input-rebate" placeholder="0.00" value="0.00" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                    <span class="font-semibold text-slate-700 block mb-1"><i class="fa-solid fa-circle-info text-emerald-600"></i> Tetapan Pengecualian Cukai SST:</span>
+                    <label class="flex items-center gap-2 cursor-pointer text-slate-600">
+                        <input type="checkbox" id="input-taxable-zerolution" class="rounded text-emerald-600 focus:ring-emerald-500">
+                        <span>Kenakan SST ke atas Ansuran Zerolution (Default: Pengecualian SST)</span>
+                    </label>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeAddAccountModal()" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-maxis-green hover:bg-maxis-darkgreen text-white rounded-lg text-sm font-semibold shadow">Simpan Talian</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const defaultAccounts = [
+            {
+                id: 1,
+                name: "Ahmad (Talian Utama / Postpaid 128)",
+                phone: "012-345 6789",
+                plan: 128.00,
+                zerolution: 95.00,
+                addon: 15.00,
+                rebate: 10.00,
+                taxableZerolution: false
+            },
+            {
+                id: 2,
+                name: "Siti (Talian Tambahan Zerolution)",
+                phone: "012-987 6543",
+                plan: 48.00,
+                zerolution: 65.00,
+                addon: 0.00,
+                rebate: 0.00,
+                taxableZerolution: false
+            },
+            {
+                id: 3,
+                name: "Farhan (Talian Tambahan 2)",
+                phone: "017-111 2233",
+                plan: 48.00,
+                zerolution: 0.00,
+                addon: 10.00,
+                rebate: 5.00,
+                taxableZerolution: false
+            },
+            {
+                id: 4,
+                name: "Maxis Home Fibre (Akaun Rumah)",
+                phone: "88492019",
+                plan: 139.00,
+                zerolution: 0.00,
+                addon: 0.00,
+                rebate: 20.00,
+                taxableZerolution: false
+            }
+        ];
+
+        let accounts = [];
+        let sstRate = 0.06; // Default to 6% as specified by user
+
+        window.onload = function() {
+            loadSavedData();
+            renderAccounts();
+            calculateAll();
+        };
+
+        function loadSavedData() {
+            const saved = localStorage.getItem('maxis_accounts_data');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    accounts = parsed.accounts || defaultAccounts;
+                    sstRate = parsed.sstRate !== undefined ? parsed.sstRate : 0.06;
+                    if(parsed.title) document.getElementById('master-bill-title').value = parsed.title;
+                } catch(e) {
+                    accounts = [...defaultAccounts];
+                }
+            } else {
+                accounts = [...defaultAccounts];
+            }
+            document.getElementById('sst-rate-select').value = sstRate.toFixed(2);
+            updateTaxLabels();
+        }
+
+        function saveData() {
+            const title = document.getElementById('master-bill-title').value;
+            localStorage.setItem('maxis_accounts_data', JSON.stringify({
+                accounts: accounts,
+                sstRate: sstRate,
+                title: title
+            }));
+        }
+
+        function updateTaxRate() {
+            sstRate = parseFloat(document.getElementById('sst-rate-select').value) || 0.0;
+            updateTaxLabels();
+            calculateAll();
+            saveData();
+        }
+
+        function updateTaxLabels() {
+            const percentageText = `${(sstRate * 100).toFixed(0)}%`;
+            document.querySelectorAll('.sst-rate-label').forEach(el => el.innerText = percentageText);
+        }
+
+        function renderAccounts() {
+            const container = document.getElementById('accounts-container');
+            container.innerHTML = '';
+
+            if (accounts.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-slate-400">
+                        <i class="fa-solid fa-folder-open text-4xl mb-2"></i>
+                        <p class="text-sm">Tiada akaun dimasukkan lagi. Klik button "Tambah Talian Baru" di atas.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            accounts.forEach((acc, index) => {
+                const subtotal = calculateAccountSubtotal(acc);
+                const tax = calculateAccountTax(acc);
+                const total = subtotal + tax;
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl p-4 transition-all space-y-3";
+                
+                card.innerHTML = `
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-full bg-maxis-green text-white font-bold text-xs flex items-center justify-center">${index + 1}</span>
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-sm sm:text-base">${escapeHtml(acc.name)}</h3>
+                                <p class="text-xs text-slate-500 font-mono">${escapeHtml(acc.phone || 'Tiada No.')}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 self-end sm:self-auto">
+                            <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-lg">
+                                Perlu Dibayar: RM ${total.toFixed(2)}
+                            </span>
+                            <button onclick="openEditAccountModal(${acc.id})" class="p-1.5 text-slate-500 hover:text-blue-600 rounded-md hover:bg-white" title="Sunting">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <button onclick="shareWhatsApp(${acc.id})" class="p-1.5 text-slate-500 hover:text-emerald-600 rounded-md hover:bg-white" title="Kongsi WhatsApp">
+                                <i class="fa-brands fa-whatsapp text-lg"></i>
+                            </button>
+                            <button onclick="deleteAccount(${acc.id})" class="p-1.5 text-slate-500 hover:text-rose-600 rounded-md hover:bg-white" title="Padam">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <span class="text-slate-400 block font-medium">Pelan Asas</span>
+                            <span class="text-slate-800 font-bold">RM ${acc.plan.toFixed(2)}</span>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <span class="text-slate-400 block font-medium">Zerolution</span>
+                            <span class="text-purple-700 font-bold">RM ${acc.zerolution.toFixed(2)}</span>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <span class="text-slate-400 block font-medium">Add-on / Pas</span>
+                            <span class="text-slate-800 font-bold">RM ${acc.addon.toFixed(2)}</span>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <span class="text-slate-400 block font-medium">Diskaun/Rebat</span>
+                            <span class="text-emerald-600 font-bold">-RM ${acc.rebate.toFixed(2)}</span>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <span class="text-slate-400 block font-medium">Sub-Jumlah</span>
+                            <span class="text-slate-900 font-bold">RM ${subtotal.toFixed(2)}</span>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <span class="text-slate-400 block font-medium">Cukai SST (${(sstRate * 100).toFixed(0)}%)</span>
+                            <span class="text-amber-700 font-bold">RM ${tax.toFixed(2)}</span>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+
+            renderSummaryTable();
+        }
+
+        function calculateAccountSubtotal(acc) {
+            return (acc.plan + acc.zerolution + acc.addon) - acc.rebate;
+        }
+
+        function calculateAccountTax(acc) {
+            // Usually SST is charged on Base Plan, Add-ons minus Rebates. Zerolution peranti is exempted unless specified.
+            let taxableBase = acc.plan + acc.addon - acc.rebate;
+            if (acc.taxableZerolution) {
+                taxableBase += acc.zerolution;
+            }
+            if (taxableBase < 0) taxableBase = 0;
+            return taxableBase * sstRate;
+        }
+
+        function calculateAll() {
+            let grandPlan = 0;
+            let grandZero = 0;
+            let grandAddon = 0;
+            let grandRebate = 0;
+            let grandSubtotal = 0;
+            let grandTax = 0;
+            let grandTotal = 0;
+
+            accounts.forEach(acc => {
+                const sub = calculateAccountSubtotal(acc);
+                const tax = calculateAccountTax(acc);
+                const total = sub + tax;
+
+                grandPlan += acc.plan;
+                grandZero += acc.zerolution;
+                grandAddon += acc.addon;
+                grandRebate += acc.rebate;
+                grandSubtotal += sub;
+                grandTax += tax;
+                grandTotal += total;
+            });
+
+            document.getElementById('total-accounts-count').innerText = `${accounts.length} Talian`;
+            document.getElementById('total-plans-amount').innerText = `RM ${grandPlan.toFixed(2)}`;
+            document.getElementById('total-zerolution-amount').innerText = `RM ${grandZero.toFixed(2)}`;
+            document.getElementById('total-addons-rebates-amount').innerText = `RM ${(grandAddon - grandRebate).toFixed(2)}`;
+
+            document.getElementById('grand-subtotal-display').innerText = `RM ${grandSubtotal.toFixed(2)}`;
+            document.getElementById('grand-tax-display').innerText = `RM ${grandTax.toFixed(2)}`;
+            document.getElementById('grand-total-display').innerText = `RM ${grandTotal.toFixed(2)}`;
+
+            // Footer table updates
+            document.getElementById('foot-plan').innerText = `RM ${grandPlan.toFixed(2)}`;
+            document.getElementById('foot-zero').innerText = `RM ${grandZero.toFixed(2)}`;
+            document.getElementById('foot-addon').innerText = `RM ${grandAddon.toFixed(2)}`;
+            document.getElementById('foot-rebate').innerText = `-RM ${grandRebate.toFixed(2)}`;
+            document.getElementById('foot-subtotal').innerText = `RM ${grandSubtotal.toFixed(2)}`;
+            document.getElementById('foot-tax').innerText = `RM ${grandTax.toFixed(2)}`;
+            document.getElementById('foot-total').innerText = `RM ${grandTotal.toFixed(2)}`;
+        }
+
+        function renderSummaryTable() {
+            const tbody = document.getElementById('summary-table-body');
+            tbody.innerHTML = '';
+
+            accounts.forEach((acc, i) => {
+                const sub = calculateAccountSubtotal(acc);
+                const tax = calculateAccountTax(acc);
+                const total = sub + tax;
+
+                const tr = document.createElement('tr');
+                tr.className = i % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100/50';
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-xs font-mono text-slate-400">${i + 1}</td>
+                    <td class="py-3 px-4 font-semibold text-slate-800">
+                        ${escapeHtml(acc.name)}
+                        <span class="block text-xs font-normal text-slate-400">${escapeHtml(acc.phone || '')}</span>
+                    </td>
+                    <td class="py-3 px-4 text-right font-mono text-slate-700">RM ${acc.plan.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-right font-mono text-purple-700 font-medium">RM ${acc.zerolution.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-right font-mono text-slate-700">RM ${acc.addon.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-right font-mono text-emerald-600">-RM ${acc.rebate.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-right font-mono text-slate-800 font-semibold">RM ${sub.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-right font-mono text-amber-700">RM ${tax.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-right font-mono font-bold text-emerald-700 bg-emerald-50/70 text-sm">RM ${total.toFixed(2)}</td>
+                    <td class="py-3 px-4 text-center no-print">
+                        <button onclick="shareWhatsApp(${acc.id})" class="text-emerald-600 hover:text-emerald-800 text-xs font-medium px-2 py-1 rounded bg-emerald-50 border border-emerald-200">
+                            <i class="fa-brands fa-whatsapp"></i> Hantar
+                        </button>
+                    </td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openAddAccountModal() {
+            document.getElementById('edit-account-id').value = '';
+            document.getElementById('modal-title').innerText = 'Tambah Talian / Akaun Baru';
+            document.getElementById('account-form').reset();
+            document.getElementById('account-modal').classList.remove('hidden');
+        }
+
+        function openEditAccountModal(id) {
+            const acc = accounts.find(a => a.id === id);
+            if (!acc) return;
+
+            document.getElementById('edit-account-id').value = acc.id;
+            document.getElementById('modal-title').innerText = 'Sunting Akaun / Talian';
+            document.getElementById('input-name').value = acc.name;
+            document.getElementById('input-phone').value = acc.phone;
+            document.getElementById('input-plan').value = acc.plan;
+            document.getElementById('input-zerolution').value = acc.zerolution;
+            document.getElementById('input-addon').value = acc.addon;
+            document.getElementById('input-rebate').value = acc.rebate;
+            document.getElementById('input-taxable-zerolution').checked = !!acc.taxableZerolution;
+
+            document.getElementById('account-modal').classList.remove('hidden');
+        }
+
+        function closeAddAccountModal() {
+            document.getElementById('account-modal').classList.add('hidden');
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const editId = document.getElementById('edit-account-id').value;
+
+            const name = document.getElementById('input-name').value.trim();
+            const phone = document.getElementById('input-phone').value.trim();
+            const plan = parseFloat(document.getElementById('input-plan').value) || 0;
+            const zerolution = parseFloat(document.getElementById('input-zerolution').value) || 0;
+            const addon = parseFloat(document.getElementById('input-addon').value) || 0;
+            const rebate = parseFloat(document.getElementById('input-rebate').value) || 0;
+            const taxableZerolution = document.getElementById('input-taxable-zerolution').checked;
+
+            if (editId) {
+                // Update
+                const acc = accounts.find(a => a.id === parseInt(editId));
+                if (acc) {
+                    acc.name = name;
+                    acc.phone = phone;
+                    acc.plan = plan;
+                    acc.zerolution = zerolution;
+                    acc.addon = addon;
+                    acc.rebate = rebate;
+                    acc.taxableZerolution = taxableZerolution;
+                }
+            } else {
+                // Add new
+                const newAcc = {
+                    id: Date.now(),
+                    name: name,
+                    phone: phone,
+                    plan: plan,
+                    zerolution: zerolution,
+                    addon: addon,
+                    rebate: rebate,
+                    taxableZerolution: taxableZerolution
+                };
+                accounts.push(newAcc);
+            }
+
+            closeAddAccountModal();
+            renderAccounts();
+            calculateAll();
+            saveData();
+        }
+
+        function deleteAccount(id) {
+            if (confirm("Adakah anda pasti ingin memadamkan talian ini?")) {
+                accounts = accounts.filter(a => a.id !== id);
+                renderAccounts();
+                calculateAll();
+                saveData();
+            }
+        }
+
+        function shareWhatsApp(id) {
+            const acc = accounts.find(a => a.id === id);
+            if (!acc) return;
+
+            const sub = calculateAccountSubtotal(acc);
+            const tax = calculateAccountTax(acc);
+            const total = sub + tax;
+
+            const msg = `*Penyata Bayaran Bil Maxis*\n\n` +
+                `👤 *Nama:* ${acc.name}\n` +
+                `📱 *Nombor:* ${acc.phone || '-'}\n\n` +
+                `🔹 Pelan Asas: RM ${acc.plan.toFixed(2)}\n` +
+                `📱 Zerolution: RM ${acc.zerolution.toFixed(2)}\n` +
+                `➕ Add-on: RM ${acc.addon.toFixed(2)}\n` +
+                `➖ Rebat: -RM ${acc.rebate.toFixed(2)}\n` +
+                `───────────────\n` +
+                `💵 Sub-jumlah: RM ${sub.toFixed(2)}\n` +
+                `🏛️ SST (${(sstRate * 100).toFixed(0)}%): RM ${tax.toFixed(2)}\n` +
+                `✅ *JUMLAH BERSIH:* RM ${total.toFixed(2)}\n\n` +
+                `Sila buat bayaran RM ${total.toFixed(2)}. Terima kasih!`;
+
+            const encoded = encodeURIComponent(msg);
+            window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+        }
+
+        function exportToExcel() {
+            const exportData = accounts.map((acc, idx) => {
+                const sub = calculateAccountSubtotal(acc);
+                const tax = calculateAccountTax(acc);
+                const total = sub + tax;
+                return {
+                    "No": idx + 1,
+                    "Nama Pengguna": acc.name,
+                    "Nombor Talian": acc.phone,
+                    "Pelan Asas (RM)": acc.plan,
+                    "Zerolution (RM)": acc.zerolution,
+                    "Add-on (RM)": acc.addon,
+                    "Rebat (RM)": acc.rebate,
+                    "Sub-Jumlah (RM)": sub,
+                    "SST (RM)": tax,
+                    "Jumlah Perlu Dibayar (RM)": total
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pecahan Bil");
+            XLSX.writeFile(workbook, "Pecahan_Bil_Maxis_Per_Akaun.xlsx");
+        }
+
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+    </script>
+</body>
+</html>
